@@ -3,10 +3,17 @@
  * e-Gov法令API v2 を使った条文取得・検索のビジネスロジック
  */
 
-import { fetchLawData, fetchLawRevisions, searchLaws, getEgovUrl } from '../egov-client.js';
+import {
+  fetchLawData,
+  fetchLawRevisions,
+  searchLaws,
+  searchLawsFullText,
+  rankLawSearchResults,
+  getEgovUrl,
+} from '../egov-client.js';
 import { extractArticle, extractToc } from '../egov-parser.js';
+import { stripTags } from '../html-utils.js';
 import { NotFoundError } from '../errors.js';
-import type { EgovLawSearchResult } from '../types.js';
 
 export interface GetLawArticleResult {
   lawTitle: string;
@@ -28,10 +35,14 @@ export interface SearchLawResultItem {
   lawNum: string;
   lawType: string;
   egovUrl: string;
+  /** 本文検索のときの該当箇所（抜粋） */
+  snippet?: string;
 }
 
 export interface SearchLawResult {
   keyword: string;
+  /** title=法令名・略称で一致 / fulltext=法令名で見つからず本文検索に切り替えた */
+  mode: 'title' | 'fulltext';
   results: SearchLawResultItem[];
 }
 
@@ -61,7 +72,8 @@ export async function getLawArticle(params: {
   return {
     lawTitle,
     article: params.article,
-    articleCaption: result.articleCaption ?? '',
+    // e-Gov の見出しは「（業務の制限）」と括弧つきで来る。表示側で括弧を付けるので外しておく
+    articleCaption: (result.articleCaption ?? '').replace(/^（(.*)）$/, '$1'),
     text: result.text,
     egovUrl,
   };
@@ -136,8 +148,12 @@ export async function getLawHistory(params: {
   };
 }
 
+/** 法令名検索で並べ替え用に取ってくる候補数 */
+const SEARCH_CANDIDATE_LIMIT = 100;
+
 /**
  * 法令をキーワード検索
+ * まず法令名・略称で探し（完全一致→前方一致→部分一致の順）、なければ本文検索に切り替える。
  */
 export async function searchLaw(params: {
   keyword: string;
@@ -145,16 +161,34 @@ export async function searchLaw(params: {
   limit?: number;
 }): Promise<SearchLawResult> {
   const limit = Math.min(params.limit ?? 10, 20);
-  const results = await searchLaws(params.keyword, limit, params.lawType);
+  const keyword = params.keyword.trim();
 
+  const byTitle = await searchLaws(keyword, SEARCH_CANDIDATE_LIMIT, params.lawType);
+  if (byTitle.length > 0) {
+    return {
+      keyword,
+      mode: 'title',
+      results: rankLawSearchResults(byTitle, keyword).slice(0, limit).map(r => ({
+        lawTitle: r.revision_info?.law_title ?? r.current_revision_info?.law_title ?? '',
+        lawId: r.law_info.law_id,
+        lawNum: r.law_info.law_num,
+        lawType: r.law_info.law_type,
+        egovUrl: getEgovUrl(r.law_info.law_id),
+      })),
+    };
+  }
+
+  const byText = await searchLawsFullText(keyword, limit, params.lawType);
   return {
-    keyword: params.keyword,
-    results: results.map((r: EgovLawSearchResult) => ({
-      lawTitle: r.revision_info?.law_title ?? r.current_revision_info?.law_title ?? '',
+    keyword,
+    mode: 'fulltext',
+    results: byText.map(r => ({
+      lawTitle: r.revision_info?.law_title ?? '',
       lawId: r.law_info.law_id,
       lawNum: r.law_info.law_num,
       lawType: r.law_info.law_type,
       egovUrl: getEgovUrl(r.law_info.law_id),
+      snippet: r.sentences?.[0] ? stripTags(r.sentences[0].text) : undefined,
     })),
   };
 }
