@@ -5,3 +5,5 @@ dist/
 *.tgz
 .vercel
 .DS_Store
+.wrangler/
+会話ログ/
