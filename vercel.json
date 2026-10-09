@@ -1,25 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build",
-  "outputDirectory": ".",
-  "functions": {
-    "api/mcp.ts": {
-      "maxDuration": 300
-    },
-    "api/search-saiketsu.ts": {
-      "maxDuration": 120
-    },
-    "api/get-law.ts": { "maxDuration": 30 },
-    "api/search-law.ts": { "maxDuration": 30 },
-    "api/get-tsutatsu.ts": { "maxDuration": 60 },
-    "api/list-tsutatsu.ts": { "maxDuration": 30 },
-    "api/list-saiketsu.ts": { "maxDuration": 30 },
-    "api/get-saiketsu.ts": { "maxDuration": 60 }
-  },
-  "rewrites": [
-    {
-      "source": "/mcp",
-      "destination": "/api/mcp"
-    }
+  "builds": [
+    { "src": "api/mcp.ts", "use": "@vercel/node", "config": { "maxDuration": 30, "memory": 256 } },
+    { "src": "api/search-saiketsu.ts", "use": "@vercel/node", "config": { "maxDuration": 60, "memory": 256 } },
+    { "src": "api/get-law.ts", "use": "@vercel/node", "config": { "maxDuration": 30, "memory": 256 } },
+    { "src": "api/get-law-history.ts", "use": "@vercel/node", "config": { "maxDuration": 30, "memory": 256 } },
+    { "src": "api/search-law.ts", "use": "@vercel/node", "config": { "maxDuration": 30, "memory": 256 } },
+    { "src": "api/get-tsutatsu.ts", "use": "@vercel/node", "config": { "maxDuration": 60, "memory": 256 } },
+    { "src": "api/list-tsutatsu.ts", "use": "@vercel/node", "config": { "maxDuration": 30, "memory": 256 } },
+    { "src": "api/list-saiketsu.ts", "use": "@vercel/node", "config": { "maxDuration": 30, "memory": 256 } },
+    { "src": "api/get-saiketsu.ts", "use": "@vercel/node", "config": { "maxDuration": 60, "memory": 256 } }
+  ],
+  "routes": [
+    { "src": "/mcp", "dest": "/api/mcp.ts" }
   ]
 }

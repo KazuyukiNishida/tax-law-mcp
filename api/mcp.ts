@@ -31,12 +31,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   try {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // stateless
+      enableJsonResponse: true,      // Vercel: SSE ストリームではなく JSON で直接返す
     });
 
     const server = createServer();
     await server.connect(transport);
 
-    await transport.handleRequest(req, res);
+    // @vercel/node が JSON ボディを先読みするため、パース済みの body を渡す
+    await transport.handleRequest(req, res, (req as any).body);
   } catch (error) {
     console.error('MCP handler error:', error);
     if (!res.headersSent) {
