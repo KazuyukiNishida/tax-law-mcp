@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerGetLawTool } from './tools/get-law.js';
+import { registerGetLawHistoryTool } from './tools/get-law-history.js';
 import { registerSearchLawTool } from './tools/search-law.js';
 import { registerGetTsutatsuTool } from './tools/get-tsutatsu.js';
 import { registerListTsutatsuTool } from './tools/list-tsutatsu.js';
@@ -80,8 +81,9 @@ export function createServer(): McpServer {
   );
 
   // 法令ツール（e-Gov API v2）
-  registerGetLawTool(server);       // get_law: 条文取得
-  registerSearchLawTool(server);    // search_law: 法令キーワード検索
+  registerGetLawTool(server);            // get_law: 条文取得
+  registerGetLawHistoryTool(server);     // get_law_history: 改正履歴
+  registerSearchLawTool(server);         // search_law: 法令キーワード検索
 
   // 通達ツール（NTAスクレイピング）
   registerGetTsutatsuTool(server);  // get_tsutatsu: 通達取得

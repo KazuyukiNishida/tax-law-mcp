@@ -128,3 +128,56 @@ export async function searchLaws(
 export function getEgovUrl(lawId: string): string {
   return `https://laws.e-gov.go.jp/law/${lawId}`;
 }
+
+export interface EgovRevision {
+  law_revision_id: string;
+  law_title: string;
+  amendment_promulgate_date: string;
+  amendment_enforcement_date: string;
+  amendment_enforcement_comment: string | null;
+  amendment_law_id: string | null;
+  amendment_law_title: string | null;
+  amendment_law_num: string | null;
+  current_revision_status: 'CurrentEnforced' | 'UnEnforced' | 'PreviousEnforced' | string;
+}
+
+export interface EgovLawRevisionsResponse {
+  law_info: {
+    law_id: string;
+    law_num: string;
+    promulgation_date: string;
+  };
+  revisions: EgovRevision[];
+}
+
+/**
+ * 法令の改正履歴一覧を取得
+ */
+export async function fetchLawRevisions(lawNameOrId: string): Promise<EgovLawRevisionsResponse & { resolvedLawId: string }> {
+  let lawId: string;
+  const { name, lawId: resolvedId } = resolveLawName(lawNameOrId);
+
+  if (resolvedId) {
+    lawId = resolvedId;
+  } else if (/^\d{15}$/.test(lawNameOrId)) {
+    lawId = lawNameOrId;
+  } else {
+    const results = await searchLaws(name, 1);
+    if (results.length === 0) {
+      throw new Error(`法令が見つかりません: "${name}"`);
+    }
+    lawId = results[0].law_info.law_id;
+  }
+
+  await rateLimit();
+  const url = `${EGOV_API_BASE}/law_revisions/${lawId}`;
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+
+  if (!res.ok) {
+    if (res.status === 404) throw new Error(`法令が見つかりません (law_id: ${lawId})`);
+    throw new Error(`e-Gov API エラー: ${res.status} ${res.statusText}`);
+  }
+
+  const data = await res.json() as EgovLawRevisionsResponse;
+  return { ...data, resolvedLawId: lawId };
+}

@@ -3,7 +3,7 @@
  * e-Gov法令API v2 を使った条文取得・検索のビジネスロジック
  */
 
-import { fetchLawData, searchLaws, getEgovUrl } from '../egov-client.js';
+import { fetchLawData, fetchLawRevisions, searchLaws, getEgovUrl } from '../egov-client.js';
 import { extractArticle, extractToc } from '../egov-parser.js';
 import { NotFoundError } from '../errors.js';
 import type { EgovLawSearchResult } from '../types.js';
@@ -78,6 +78,62 @@ export async function getLawToc(params: {
   const toc = extractToc(data);
 
   return { lawTitle, toc, egovUrl };
+}
+
+export interface LawRevisionItem {
+  enforcementDate: string;
+  promulgateDate: string;
+  amendmentLawNum: string | null;
+  amendmentLawTitle: string | null;
+  status: string;
+  comment: string | null;
+  revisionId: string;
+}
+
+export interface GetLawHistoryResult {
+  lawTitle: string;
+  lawId: string;
+  lawNum: string;
+  egovUrl: string;
+  revisions: LawRevisionItem[];
+}
+
+function statusLabel(s: string): string {
+  if (s === 'CurrentEnforced') return '現行';
+  if (s === 'UnEnforced') return '未施行';
+  if (s === 'PreviousEnforced') return '適用済';
+  return s;
+}
+
+/**
+ * 法令の改正履歴を取得
+ */
+export async function getLawHistory(params: {
+  lawName: string;
+  limit?: number;
+}): Promise<GetLawHistoryResult> {
+  const data = await fetchLawRevisions(params.lawName);
+  const lawTitle = data.revisions[0]?.law_title ?? params.lawName;
+  const egovUrl = getEgovUrl(data.resolvedLawId);
+  const limit = params.limit ?? 30;
+
+  const revisions: LawRevisionItem[] = data.revisions.slice(0, limit).map(r => ({
+    enforcementDate: r.amendment_enforcement_date,
+    promulgateDate: r.amendment_promulgate_date,
+    amendmentLawNum: r.amendment_law_num,
+    amendmentLawTitle: r.amendment_law_title,
+    status: statusLabel(r.current_revision_status),
+    comment: r.amendment_enforcement_comment,
+    revisionId: r.law_revision_id,
+  }));
+
+  return {
+    lawTitle,
+    lawId: data.resolvedLawId,
+    lawNum: data.law_info.law_num,
+    egovUrl,
+    revisions,
+  };
 }
 
 /**
