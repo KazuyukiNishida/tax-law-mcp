@@ -26,15 +26,41 @@ async function rateLimit(): Promise<void> {
   lastRequestTime = Date.now();
 }
 
-/** law_id の形式（例: 326AC1000000237, 340M50000040011）。英字を含むので数字15桁ではない */
-const LAW_ID_PATTERN = /^\d{3}[0-9A-Z]{12}$/;
+/**
+ * e-Gov の law_id 形式かどうかを判定する
+ *
+ * law_id は「元号年3桁 + 法令種別を表す12文字」の全15文字。種別部分の形は一様ではなく、
+ * v2 API から実データ401件を抽出して確認できただけでも以下の形がある:
+ *   340AC0000000033 (法律)   340CO0000000096 (政令)   105DF0000000337 (太政官布告)
+ *   340M50000040011 (府省令) 348RJNJ10004000 (規則)   416M60001FCA002 (府省令・英字混在)
+ *   321CONSTITUTION (日本国憲法)
+ * 種別コードを列挙する方式だと新しい形式を取りこぼすため(旧実装の /^\d{15}$/ は英字を含む
+ * 実データに一切マッチせず、law_id 直接指定が丸ごと死んでいた)、
+ * 「3桁数字 + 英大文字始まりの英数字12文字」という構造だけで判定する。
+ * 法令名は日本語なのでこのパターンには一致しない。
+ */
+const LAW_ID_PATTERN = /^\d{3}[A-Z][A-Z0-9]{11}$/;
+
+export function isLawId(value: string): boolean {
+  return LAW_ID_PATTERN.test(value);
+}
 
 /** 法令名解決のために名前検索で取ってくる候補数の上限 */
 const RESOLVE_CANDIDATE_LIMIT = 500;
 
-/** 法令名の比較用正規化（全角半角の揺れ・空白を吸収） */
-export function normalizeLawTitle(s: string): string {
-  return s.normalize('NFKC').replace(/\s/g, '');
+/**
+ * 法令名を比較用に正規化する
+ * 全角/半角、句読点、括弧、空白を取り除き、完全一致・前方一致の比較に使う
+ * 入力が undefined/null/空文字の場合は空文字を返す(防御的)。
+ */
+function normalizeLawTitle(s: string | undefined | null): string {
+  if (!s) return '';
+  return s
+    // 全角英数→半角
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+    // 句読点・括弧・中黒・空白の除去
+    .replace(/[\s、，,。．・「」『』（）()【】［］\[\]]/g, '')
+    .toLowerCase();
 }
 
 /** 検索結果の法令名（改正履歴時点・現時点の両方） */
@@ -92,7 +118,8 @@ export async function resolveLawId(lawNameOrId: string): Promise<string> {
   const input = lawNameOrId.trim();
   const { name, lawId: registeredId } = resolveLawName(input);
   if (registeredId) return registeredId;
-  if (LAW_ID_PATTERN.test(input)) return input;
+  // law_id 形式ならそのまま使う(プリセット未登録の法令はこの経路で取得できる)
+  if (isLawId(input)) return input;
 
   const candidates = await searchLaws(name, RESOLVE_CANDIDATE_LIMIT);
   const exact = rankLawSearchResults(candidates, name).filter(r => lawMatchRank(r, name) <= 1);
